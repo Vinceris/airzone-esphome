@@ -126,6 +126,7 @@ Notes:
 - **On/off per zone**: bit 2 of zone register 0, done as **read-modify-write with function 06**: the last value read is taken, only bit 2 is changed, the whole register is written back.
 - **Mode is global**: the Airzone installation has a single mode for all zones (as on the Think thermostats). Choosing Cool/Heat/Dry/Fan on one zone writes system register 0 (bits 0-8 only, read-modify-write) and therefore changes the mode for **every** zone, then turns that zone on. Choosing Off only turns that zone off. A zone that is on shows the installation's mode; a zone that is off shows Off.
 - **Heat** is written as code 4 (air heating); the central may store and report it as 258. Both are shown as Heat.
+- **Code 9** is not in the table above and we have never seen it on our central; the firmware still reads it as **Cool**, because some other Airzone installations are reported to use it for cooling. If your central shows a mode code we do not list, the *System register 0* diagnostic sensor gives you the raw value: please open an issue with it.
 - **Action** (heating/cooling/drying/fan/idle) comes from bit 7 of zone register 9.
 - Writes only happen when you act from Home Assistant, never at boot.
 
