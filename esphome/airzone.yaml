@@ -1,0 +1,428 @@
+# Airzone Innobus Pro6 (AZCE6IBPRO6) -> Home Assistant over Modbus RTU,
+# using the central's "Automation bus" connector, an ESP32 and a TTL-RS485 module.
+#
+# Bus settings: 19200 baud, 8 data bits, EVEN parity, 1 stop bit (8E1), slave address 1.
+# Register addresses: zone register = zone number x 256 + register (system = zone 0).
+#   zone reg 0  bit 2 = zone on, bits 8-11 = zone mode
+#   zone reg 3  setpoint x10 (writable, function 06)
+#   zone reg 8  probe temperature x10 (= thermostat temperature when there is no remote probe)
+#   zone reg 9  bit 7 = air demand
+#   zone reg 13 bit 8 = thermostat battery low
+#   system reg 0 bits 0-8 = installation mode, bits 9-10 = fan speed
+# See README.md for the full register map.
+#
+# Each zone is a climate entity (external component in components/airzone_zone).
+# Writes only happen when you act from Home Assistant, never at boot.
+#
+# Example installation: 3 zones (1, 2, 3). Rename them below, or add/remove zones
+# following the commented "zone 4" template at the end of each section.
+
+substitutions:
+  name: airzone
+  friendly_name: Airzone
+  zone1_name: Living room
+  zone2_name: Office
+  zone3_name: Bedroom
+  # UART pins wired to the RS485 module (check your board's pinout).
+  tx_pin: GPIO16
+  rx_pin: GPIO17
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${friendly_name} Fallback
+    password: !secret ap_password
+
+captive_portal:
+
+external_components:
+  - source:
+      type: local
+      path: components
+    components: [airzone_zone]
+
+logger:
+  # DEBUG shows outgoing/incoming Modbus frames (handy for the first connection).
+  # Switch to INFO once everything works.
+  level: DEBUG
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# On the common "TTL to RS485" boards with automatic direction, the TXD/RXD labels
+# name the MCU pin to connect: module TXD -> ESP32 TX, module RXD -> ESP32 RX.
+# If the bus does not answer, swap tx_pin and rx_pin first.
+uart:
+  id: rs485
+  tx_pin: ${tx_pin}
+  rx_pin: ${rx_pin}
+  baud_rate: 19200
+  data_bits: 8
+  parity: EVEN
+  stop_bits: 1
+
+modbus:
+  id: mb
+  uart_id: rs485
+  send_wait_time: 250ms
+
+modbus_controller:
+  - id: az
+    modbus_id: mb
+    address: 1
+    update_interval: 30s
+    command_throttle: 100ms
+    offline_skip_updates: 2
+
+binary_sensor:
+  # --- system (zone 0) ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: Radio module connected
+    register_type: read
+    address: 10
+    bitmask: 0x2
+    entity_category: diagnostic
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: Machine communication error
+    register_type: read
+    address: 30
+    bitmask: 0x8
+    device_class: problem
+    entity_category: diagnostic
+  # --- zone 1 (registers 256-511) ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone1_demand
+    name: ${zone1_name} air demand
+    register_type: read
+    address: 265 # 1*256 + 9
+    bitmask: 0x80
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: ${zone1_name} thermostat battery low
+    register_type: read
+    address: 269 # 1*256 + 13
+    bitmask: 0x100
+    device_class: battery
+  # --- zone 2 (registers 512-767) ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone2_demand
+    name: ${zone2_name} air demand
+    register_type: read
+    address: 521
+    bitmask: 0x80
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: ${zone2_name} thermostat battery low
+    register_type: read
+    address: 525
+    bitmask: 0x100
+    device_class: battery
+  # --- zone 3 (registers 768-1023) ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone3_demand
+    name: ${zone3_name} air demand
+    register_type: read
+    address: 777
+    bitmask: 0x80
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: ${zone3_name} thermostat battery low
+    register_type: read
+    address: 781
+    bitmask: 0x100
+    device_class: battery
+  # --- zone 4 template (registers 1024-1279): uncomment and add zone4_name ---
+  # - platform: modbus_controller
+  #   modbus_controller_id: az
+  #   id: zone4_demand
+  #   name: ${zone4_name} air demand
+  #   register_type: read
+  #   address: 1033 # 4*256 + 9
+  #   bitmask: 0x80
+  # - platform: modbus_controller
+  #   modbus_controller_id: az
+  #   name: ${zone4_name} thermostat battery low
+  #   register_type: read
+  #   address: 1037 # 4*256 + 13
+  #   bitmask: 0x100
+  #   device_class: battery
+
+sensor:
+  - platform: wifi_signal
+    name: WiFi signal
+    update_interval: 60s
+  - platform: uptime
+    name: Uptime
+  # --- system (zone 0) ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: sys_mode_raw
+    name: System register 0 (mode and fan speed, raw)
+    register_type: read
+    address: 0
+    value_type: U_WORD
+    entity_category: diagnostic
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: System zones present (bitmask)
+    register_type: read
+    address: 9
+    value_type: U_WORD
+    entity_category: diagnostic
+  - platform: modbus_controller
+    modbus_controller_id: az
+    name: System machine brand and errors (raw)
+    register_type: read
+    address: 50
+    value_type: U_WORD
+    entity_category: diagnostic
+  # --- zone 1 ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone1_temp
+    name: ${zone1_name} temperature
+    register_type: read
+    address: 264 # 1*256 + 8
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone1_sp
+    name: ${zone1_name} setpoint
+    register_type: read
+    address: 259 # 1*256 + 3
+    value_type: U_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone1_r0
+    name: ${zone1_name} register 0 (raw)
+    register_type: read
+    address: 256 # 1*256 + 0
+    value_type: U_WORD
+    entity_category: diagnostic
+  # --- zone 2 ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone2_temp
+    name: ${zone2_name} temperature
+    register_type: read
+    address: 520
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone2_sp
+    name: ${zone2_name} setpoint
+    register_type: read
+    address: 515
+    value_type: U_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone2_r0
+    name: ${zone2_name} register 0 (raw)
+    register_type: read
+    address: 512
+    value_type: U_WORD
+    entity_category: diagnostic
+  # --- zone 3 ---
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone3_temp
+    name: ${zone3_name} temperature
+    register_type: read
+    address: 776
+    value_type: S_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone3_sp
+    name: ${zone3_name} setpoint
+    register_type: read
+    address: 771
+    value_type: U_WORD
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+  - platform: modbus_controller
+    modbus_controller_id: az
+    id: zone3_r0
+    name: ${zone3_name} register 0 (raw)
+    register_type: read
+    address: 768
+    value_type: U_WORD
+    entity_category: diagnostic
+  # --- zone 4 template ---
+  # - platform: modbus_controller
+  #   modbus_controller_id: az
+  #   id: zone4_temp
+  #   name: ${zone4_name} temperature
+  #   register_type: read
+  #   address: 1032 # 4*256 + 8
+  #   value_type: S_WORD
+  #   unit_of_measurement: "°C"
+  #   device_class: temperature
+  #   state_class: measurement
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - multiply: 0.1
+  # - platform: modbus_controller
+  #   modbus_controller_id: az
+  #   id: zone4_sp
+  #   name: ${zone4_name} setpoint
+  #   register_type: read
+  #   address: 1027 # 4*256 + 3
+  #   value_type: U_WORD
+  #   unit_of_measurement: "°C"
+  #   device_class: temperature
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - multiply: 0.1
+  # - platform: modbus_controller
+  #   modbus_controller_id: az
+  #   id: zone4_r0
+  #   name: ${zone4_name} register 0 (raw)
+  #   register_type: read
+  #   address: 1024 # 4*256 + 0
+  #   value_type: U_WORD
+  #   entity_category: diagnostic
+
+text_sensor:
+  - platform: template
+    name: System mode
+    update_interval: 30s
+    lambda: |-
+      if (isnan(id(sys_mode_raw).state)) return {};
+      int m = ((int) id(sys_mode_raw).state) & 0x1FF;
+      switch (m) {
+        case 0: return {"Stop"};
+        case 1: case 9: return {"Cool"};
+        case 3: return {"Fan"};
+        case 4: return {"Heat (air)"};
+        case 5: case 258: return {"Heat"};
+        case 6: return {"Dry"};
+        default: return {"Code " + to_string(m)};
+      }
+  - platform: template
+    name: Fan speed
+    update_interval: 30s
+    lambda: |-
+      if (isnan(id(sys_mode_raw).state)) return {};
+      int v = (((int) id(sys_mode_raw).state) >> 9) & 0x3;
+      const char *n[] = {"Auto", "Low", "Medium", "High"};
+      return {n[v]};
+
+select:
+  # Mode of the whole installation (system register 0, bits 0-8), without
+  # turning any zone on or off. Read-modify-write with function 06.
+  - platform: template
+    name: System mode control
+    options: [Stop, Cool, Fan, Heat, Dry]
+    update_interval: 30s
+    lambda: |-
+      if (isnan(id(sys_mode_raw).state)) return {};
+      int m = ((int) id(sys_mode_raw).state) & 0x1FF;
+      switch (m) {
+        case 0: return {"Stop"};
+        case 1: case 9: return {"Cool"};
+        case 3: return {"Fan"};
+        case 4: case 5: case 258: return {"Heat"};
+        case 6: return {"Dry"};
+        default: return {};
+      }
+    set_action:
+      - lambda: |-
+          if (isnan(id(sys_mode_raw).state)) return;
+          // Heat = 4 ("air heating"). Bits 9-15 (fan speed and status) are kept as they are.
+          int code = x == "Stop" ? 0 : x == "Cool" ? 1 : x == "Fan" ? 3 : x == "Heat" ? 4 : 6;
+          uint16_t v = (((uint16_t) id(sys_mode_raw).state) & ~0x1FF) | code;
+          ESP_LOGI("airzone", "System mode %s: register 0x0000 <- 0x%04X", x.c_str(), v);
+          id(az)->queue_command(modbus_controller::ModbusCommandItem::create_write_single_command(id(az), 0x0000, v));
+
+climate:
+  - platform: airzone_zone
+    name: ${zone1_name}
+    zone: 1
+    temperature: zone1_temp
+    setpoint: zone1_sp
+    zone_register: zone1_r0
+    system_register: sys_mode_raw
+    demand: zone1_demand
+  - platform: airzone_zone
+    name: ${zone2_name}
+    zone: 2
+    temperature: zone2_temp
+    setpoint: zone2_sp
+    zone_register: zone2_r0
+    system_register: sys_mode_raw
+    demand: zone2_demand
+  - platform: airzone_zone
+    name: ${zone3_name}
+    zone: 3
+    temperature: zone3_temp
+    setpoint: zone3_sp
+    zone_register: zone3_r0
+    system_register: sys_mode_raw
+    demand: zone3_demand
+  # --- zone 4 template ---
+  # - platform: airzone_zone
+  #   name: ${zone4_name}
+  #   zone: 4
+  #   temperature: zone4_temp
+  #   setpoint: zone4_sp
+  #   zone_register: zone4_r0
+  #   system_register: sys_mode_raw
+  #   demand: zone4_demand
+  #   # optional, defaults shown:
+  #   # min_temperature: 18
+  #   # max_temperature: 30
+
+button:
+  - platform: restart
+    name: Restart
