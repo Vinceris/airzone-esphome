@@ -58,6 +58,21 @@ All connections are on the central's **Automation bus** connector, number ③ on
 | ![Automation bus connector](docs/photos/06-automation-bus-connector.jpg) | ![Indoor unit board](docs/photos/01-indoor-unit-board.jpg) |
 | Close-up of the Automation bus connector. | The Mitsubishi Electric indoor unit board (not touched; the Airzone gateway talks to it). |
 
+## Our installation
+
+The real build, step by step (the board on the bench, then mounted in the false ceiling above the central).
+
+| | |
+|---|---|
+| ![Parts](docs/photos/07-parts.jpg) | ![Bench test with Dupont wires](docs/photos/08-bench-test-dupont.jpg) |
+| The parts: sealed 12 V → 5 V USB buck, TTL-RS485 module, Wemos D1 mini ESP32, JST cable for the module's TTL header. | Bench test: ESP32 ↔ RS485 module with Dupont wires (VCC/GND/TXD/RXD as in the table above). |
+| ![A and B to the RS485 module](docs/photos/09-a-b-to-rs485.jpg) | ![Wires on the Automation bus](docs/photos/11-automation-bus-wires.jpg) |
+| The Automation bus plug wired outside the box: A (blue) and B (green), twisted, to A+ and B− of the module. | The plug back on the central: A/B to the module, + and − (red/black) to the buck. |
+| ![Installed at the central](docs/photos/10-installed-at-central.jpg) | ![ESP32 in the ceiling](docs/photos/12-esp32-in-ceiling.jpg) |
+| Everything connected at the central: buck (black box) and RS485 module hanging next to it. | The ESP32 resting on the ceiling board, powered by the buck's USB output. |
+| ![RS485 module](docs/photos/13-rs485-module-hanging.jpg) | |
+| The RS485 module hangs on its short wires next to the central (a small 3D-printed box is planned). | |
+
 ## Modbus settings
 
 | Setting | Value |
