@@ -151,6 +151,18 @@ The `System mode control` select in `airzone.yaml` changes the installation mode
 - **Setpoint range**: `min_temperature` / `max_temperature` on each climate (default 18-30 °C).
 - **Secrets**: never commit `secrets.yaml` (it is in `.gitignore`).
 
+## Fast feedback
+
+The ESP reads the central every 30 s (`update_interval` of the `modbus_controller`). A command sent from Home Assistant reaches the central at once, but without help its confirmation would wait for the next cycle: up to 30 s before the dashboard shows the new mode, zone state or setpoint.
+
+The firmware avoids that wait:
+
+- after every write (mode, zone on/off, setpoint) it reads the central again after 150 ms and once more after 3 s (`read_back` script in `airzone.yaml`, named timeouts in the climate component);
+- the *System mode* and *Fan speed* text sensors are refreshed as soon as register 0 is read;
+- the *System mode control* select publishes the requested mode immediately; if the central does not apply it, the next read brings back the real mode.
+
+Measured on our installation: mode confirmed in 0.5-3 s, zone on/off and setpoint in about 2.5 s (it used to be 15 s on average, up to 30 s).
+
 ## Troubleshooting
 
 With `logger: level: DEBUG` the ESPHome log shows every Modbus frame sent and received.
@@ -185,6 +197,12 @@ docs/
 
 Airzone, Think, Innobus and Mitsubishi Electric are trademarks of their respective owners. This project is not affiliated with or endorsed by them.
 
+## Personal use only, at your own risk
+
+This is a hobby project for **personal, non-commercial use** in your own home. It is not a product and must not be sold, bundled with paid products or services, or used to install or maintain other people's systems for a fee. It talks to the central through the Modbus interface described in Airzone's own documentation, for interoperability with Home Assistant only.
+
+Everything is provided **as is, without any warranty, at your own risk**: wrong wiring or wrong writes can damage your equipment or void its warranty. The authors are not responsible for any damage.
+
 ## License
 
-MIT, see [LICENSE](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE): you may use, copy and modify the code for any non-commercial purpose (personal use, study, hobby). Any commercial use is not allowed.

@@ -182,6 +182,11 @@ sensor:
     address: 0
     value_type: U_WORD
     entity_category: diagnostic
+    # refresh mode and fan speed as soon as the register is read (not on the next 30 s cycle)
+    on_value:
+      then:
+        - component.update: system_mode_text
+        - component.update: fan_speed_text
   - platform: modbus_controller
     modbus_controller_id: az
     name: System zones present (bitmask)
@@ -335,6 +340,7 @@ sensor:
 
 text_sensor:
   - platform: template
+    id: system_mode_text
     name: System mode
     update_interval: 30s
     lambda: |-
@@ -350,6 +356,7 @@ text_sensor:
         default: return {"Code " + to_string(m)};
       }
   - platform: template
+    id: fan_speed_text
     name: Fan speed
     update_interval: 30s
     lambda: |-
@@ -362,6 +369,7 @@ select:
   # Mode of the whole installation (system register 0, bits 0-8), without
   # turning any zone on or off. Read-modify-write with function 06.
   - platform: template
+    id: system_mode_control
     name: System mode control
     options: [Stop, Cool, Fan, Heat, Dry]
     update_interval: 30s
@@ -384,6 +392,10 @@ select:
           uint16_t v = (((uint16_t) id(sys_mode_raw).state) & ~0x1FF) | code;
           ESP_LOGI("airzone", "System mode %s: register 0x0000 <- 0x%04X", x.c_str(), v);
           id(az)->queue_command(modbus_controller::ModbusCommandItem::create_write_single_command(id(az), 0x0000, v));
+          id(read_back).execute();
+          // Home Assistant sees the requested mode at once; if the central does not apply it,
+          // the next read brings back the real one.
+          id(system_mode_control).publish_state(x);
 
 climate:
   - platform: airzone_zone
@@ -422,6 +434,17 @@ climate:
   #   # optional, defaults shown:
   #   # min_temperature: 18
   #   # max_temperature: 30
+
+# Fast feedback: after every command read the central right away (not on the next
+# 30 s cycle) and again after 3 s. Confirmation in 0.5-3 s instead of up to 30 s.
+script:
+  - id: read_back
+    mode: restart
+    then:
+      - delay: 150ms
+      - lambda: id(az)->update();
+      - delay: 3s
+      - lambda: id(az)->update();
 
 button:
   - platform: restart

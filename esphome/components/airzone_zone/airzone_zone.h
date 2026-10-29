@@ -89,6 +89,10 @@ class AirzoneZone : public climate::Climate, public Component {
     ESP_LOGI(TAG, "zone %d: register 0x%04X <- 0x%04X", this->zone_, address, value);
     this->controller_->queue_command(
         modbus_controller::ModbusCommandItem::create_write_single_command(this->controller_, address, value));
+    // Fast feedback: read the central again right after the write and once more after 3 s
+    // (named timeouts, so several writes in a row trigger a single read-back).
+    this->set_timeout("reread_now", 150, [this]() { this->controller_->update(); });
+    this->set_timeout("reread_late", 3000, [this]() { this->controller_->update(); });
   }
 
   static int mode_code_(climate::ClimateMode m) {
