@@ -197,12 +197,12 @@ docs/
 
 Airzone, Think, Innobus and Mitsubishi Electric are trademarks of their respective owners. This project is not affiliated with or endorsed by them.
 
-## Personal use only, at your own risk
+## At your own risk
 
-This is a hobby project for **personal, non-commercial use** in your own home. It is not a product and must not be sold, bundled with paid products or services, or used to install or maintain other people's systems for a fee. It talks to the central through the Modbus interface described in Airzone's own documentation, for interoperability with Home Assistant only.
+This is a hobby project, not a product. It talks to the central through the Modbus interface described in Airzone's own documentation, for interoperability with Home Assistant.
 
 Everything is provided **as is, without any warranty, at your own risk**: wrong wiring or wrong writes can damage your equipment or void its warranty. The authors are not responsible for any damage.
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE): you may use, copy and modify the code for any non-commercial purpose (personal use, study, hobby). Any commercial use is not allowed.
+MIT, see [LICENSE](LICENSE).
